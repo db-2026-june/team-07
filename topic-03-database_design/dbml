@@ -2,37 +2,223 @@
 // ║                     ER DIAGRAM — DBML                           ║
 // ╚══════════════════════════════════════════════════════════════════╝
 //
-// 📌 ЩО ПОТРІБНО ЗРОБИТИ
-// ──────────────────────────────────────────────────────────────────
-//  1. Побудуйте ER-діаграму вашої бази даних у будь-якому зручному
-//     інструменті — dbdiagram.io, draw.io, Lucidchart тощо.
+//  [Yaroslav Kvachuk] — Restaurant, Location, RestaurantTable
+//  [Ihor Zinchenko]   — Staff, StaffRole, ShiftSchedules_JunctionTable
+//  [Maksym Belei]     — BasicInventory, Supplier, BasicInventoriesSuppliersJunctionTable
+//  [Vitaliy Balia]    — MenuItem, MenuItemCategory, Ingredient, MenuItemIngredientsJunctionTable
+//  [Davyd Vlasov]     — Order, OrderType, Reservation, CustomerFeedback, Customer
 //
-//  2. Додайте зображення вашої фінальної ER-діаграми (можна вставити як посилання на зображення в інтернеті та обов'язково закомітити файл з діаграмою в репозиторій).
-//
-//  2. Кожен учасник команди підписує таблиці, які він створював:
-//
-//     [Ім'я] — назви таблиць через кому
-//     [Ім'я] — назви таблиць через кому
-//     [Ім'я] — назви таблиць через кому
-//
-//  4. У цьому файлі додайте DBML-код вашої схеми.
-//     Якщо використовуєте dbdiagram.io — там є кнопка експорту в DBML.
-//     Якщо draw.io або інший інструмент — скопіюйте схему вручну.
-//
-// ──────────────────────────────────────────────────────────────────
-// 💡 ПІДКАЗКА
-//
-//  DBML виглядає ось так (це лише приклад — не копіюйте):
-//
-//  Table users {
-//    id       bigint [primary key, increment]
-//    username varchar(100) [not null]
-//  }
-//
-//  Ref: posts.user_id > users.id
-//
-//  Повна документація: https://dbml.dbdiagram.io/docs/
-// ══════════════════════════════════════════════════════════════════
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║                     Restaurant Database — DBML                           ║
+// ╚══════════════════════════════════════════════════════════════════╝
+Table Location {
+  LocationId int [pk, increment]
+  Address varchar(255)
+}
 
+Table Restaurant {
+  RestaurantId int [pk, increment]
+  LocationId int [unique]
+  Name varchar(100)
+  Rating int
+}
 
-// Вставте ваш DBML-код нижче 👇
+Table StaffRole {
+  StaffRoleId int [pk, increment]
+  RoleName varchar(50)
+  Description varchar(255)
+}
+
+Table Staff {
+  StaffId int [pk, increment]
+  StaffRoleId int
+  Name varchar(100)
+  Address varchar(255)
+  Phone varchar(35)
+}
+
+// M:N — one staff member can work at several restaurants
+Table StaffRestaurantJunctionTable {
+  StaffId int
+  RestaurantId int
+
+  Indexes {
+    (StaffId, RestaurantId) [pk]
+  }
+}
+
+// Shift details for a staff member at a restaurant
+Table ShiftSchedules_JunctionTable {
+  ShiftScheduleId int [pk, increment]
+  StaffId int
+  RestaurantId int
+  StartDateTime datetime
+  EndDateTime datetime
+}
+
+Table MenuItemCategory {
+  CategoryId int [pk, increment]
+  CategoryName varchar(30)
+}
+
+Table MenuItem {
+  MenuItemId int [pk, increment]
+  Name varchar(100)
+  Description varchar(255)
+  Weight decimal(6,2)
+  Price decimal(10,2)
+  CategoryId int
+}
+
+// M:N — a restaurant offers many menu items, a menu item can be offered at many restaurants
+Table RestaurantMenuItemsJunctionTable {
+  RestaurantId int
+  MenuItemId int
+
+  Indexes {
+    (RestaurantId, MenuItemId) [pk]
+  }
+}
+
+// Catalog / master data — "what a dish can be made of"
+Table Ingredient {
+  IngredientId int [pk, increment]
+  Name varchar(100)
+  Weight decimal(6,2)
+  Quantity int
+}
+
+// M:N — recipe composition: a dish has many ingredients, an ingredient is used in many dishes
+Table MenuItemIngredientsJunctionTable {
+  ElementId int [pk, increment]
+  MenuItemId int
+  IngredientId int
+}
+
+// Operational stock record ("batch"): 1 ingredient -> many inventory records (different deliveries, quantities, dates)
+Table BasicInventory {
+  BasicInventoryId int [pk, increment]
+  IngredientId int
+  Name varchar(30)
+  Count int
+}
+
+// M:N — an inventory batch can be shared/tracked across restaurants
+Table RestaurantInventoryJunctionTable {
+  ElementId int [pk, increment]
+  RestaurantId int
+  BasicInventoryId int
+}
+
+Table Supplier {
+  SupplierId int [pk, increment]
+  Name varchar(30)
+  Address varchar(100)
+  Phone varchar(35)
+}
+
+// M:N — a supplier can provide many inventory items, an item can come from several suppliers
+Table BasicInventoriesSuppliersJunctionTable {
+  SupplierId int
+  BasicInventoryId int
+
+  Indexes {
+    (SupplierId, BasicInventoryId) [pk]
+  }
+}
+
+Table RestaurantTable {
+  TableId int [pk, increment]
+  RestaurantId int
+  SizeOfTable int
+}
+
+Table Customer {
+  CustomerId int [pk, increment]
+  Name varchar(100)
+  Phone varchar(35)
+}
+
+Table Reservation {
+  ReservationId int [pk, increment]
+  TableId int
+  CustomerId int
+  ReservationDateTime datetime
+  NumberOfPeople int
+}
+
+Table CustomerFeedback {
+  FeedbackId int [pk, increment]
+  CustomerId int
+  RestaurantId int
+  Rating int
+  Comment varchar(500)
+}
+
+Table OrderType {
+  OrderTypeId int [pk, increment]
+  NameOfType varchar(20) // dine-in, takeaway, delivery
+}
+
+Table "Order" {
+  OrderId int [pk, increment]
+  TableId int
+  OrderTypeId int
+  CustomerId int
+  Status varchar(20)
+}
+
+// M:N — one order can include several menu items, one menu item can appear in many orders (this is effectively the "order items" table)
+Table MenuItems_Orders_JunctionTable {
+  MenuItemId int
+  OrderId int
+
+  Indexes {
+    (MenuItemId, OrderId) [pk]
+  }
+}
+
+// ---------------------------------------------------------
+// Relationships
+// ---------------------------------------------------------
+
+Ref: Restaurant.LocationId > Location.LocationId
+
+Ref: Staff.StaffRoleId > StaffRole.StaffRoleId
+
+Ref: StaffRestaurantJunctionTable.StaffId > Staff.StaffId
+Ref: StaffRestaurantJunctionTable.RestaurantId > Restaurant.RestaurantId
+
+Ref: ShiftSchedules_JunctionTable.StaffId > Staff.StaffId
+Ref: ShiftSchedules_JunctionTable.RestaurantId > Restaurant.RestaurantId
+
+Ref: MenuItem.CategoryId > MenuItemCategory.CategoryId
+
+Ref: RestaurantMenuItemsJunctionTable.RestaurantId > Restaurant.RestaurantId
+Ref: RestaurantMenuItemsJunctionTable.MenuItemId > MenuItem.MenuItemId
+
+Ref: MenuItemIngredientsJunctionTable.MenuItemId > MenuItem.MenuItemId
+Ref: MenuItemIngredientsJunctionTable.IngredientId > Ingredient.IngredientId
+
+Ref: BasicInventory.IngredientId > Ingredient.IngredientId
+
+Ref: RestaurantInventoryJunctionTable.RestaurantId > Restaurant.RestaurantId
+Ref: RestaurantInventoryJunctionTable.BasicInventoryId > BasicInventory.BasicInventoryId
+
+Ref: BasicInventoriesSuppliersJunctionTable.SupplierId > Supplier.SupplierId
+Ref: BasicInventoriesSuppliersJunctionTable.BasicInventoryId > BasicInventory.BasicInventoryId
+
+Ref: RestaurantTable.RestaurantId > Restaurant.RestaurantId
+
+Ref: Reservation.TableId > RestaurantTable.TableId
+Ref: Reservation.CustomerId > Customer.CustomerId
+
+Ref: CustomerFeedback.CustomerId > Customer.CustomerId
+Ref: CustomerFeedback.RestaurantId > Restaurant.RestaurantId
+
+Ref: "Order".TableId > RestaurantTable.TableId
+Ref: "Order".OrderTypeId > OrderType.OrderTypeId
+Ref: "Order".CustomerId > Customer.CustomerId
+
+Ref: MenuItems_Orders_JunctionTable.MenuItemId > MenuItem.MenuItemId
+Ref: MenuItems_Orders_JunctionTable.OrderId > "Order".OrderId

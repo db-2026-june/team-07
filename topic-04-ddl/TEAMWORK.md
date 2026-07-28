@@ -7,7 +7,7 @@
 | Учасник | Роль у команді | Що зроблено | Артефакти / файли |
 | :--- | :--- | :--- | :--- |
 | **Ihor Zinchenko** | Lead SQL Architect | Розробка структури схеми, написання DDL для модулів Меню, Складу та Замовлень. Налаштування PK/FK зв'язків та індексів. | `restaurant_DDL_final.sql` |
-| **Yaroslav Kvachuk** | Team Lead / Integrator | Координація розробки, написання DDL для ядра системи (Locations, Restaurants). Фінальна збірка та валідація скрипта. | `restaurant_DDL_final.sql` |
+| **Yaroslav Kvachuk** | Team Lead | Координація розробки, написання DDL для ядра системи (Locations, Restaurants). Фінальна збірка та валідація скрипта. | `restaurant_DDL_final.sql` |
 | **Maksym Belei** | Supply Chain Analyst | Проектування та опис обмежень для таблиць постачальників та інвентаризації продуктів. | `restaurant_DDL_final.sql` |
 | **Vitaliy Balia** | HR Systems Modeler | Реалізація логіки персоналу та ролей: написання CREATE TABLE для Staff та StaffRoles. | `restaurant_DDL_final.sql` |
 | **Davyd Vlasov** | CRM Designer | Розробка структури для взаємодії з клієнтами: Reservations, Feedbacks та логіка відгуків. | `restaurant_DDL_final.sql` |

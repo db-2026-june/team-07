@@ -95,6 +95,41 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- 1.4 Purpose: Returns a summary of customer information, including contact details, order statistics, reservation statistics, and the total amount spent.
+-- Parameters: 
+--   - p_customerid INT - The unique identifier of the customer.
+-- Returns:
+--   TABLE
+--     customer_name (VARCHAR): Customer's name.
+--     phone (VARCHAR): Customer's phone number. (VARCHAR is used because phone numbers may contain '+' and other non-numeric characters).
+--     total_orders (BIGINT): Total number of orders placed.
+--     total_reservations (BIGINT): Total number of reservations made.
+--     total_spent (NUMERIC): Total amount spent on all orders.
+-- Expected behavior: Retrieves customer information and calculates the total number of orders, total reservations, and overall spending based on the customer's order history. Returns an empty result if the specified customer does not exist.
+CREATE OR REPLACE FUNCTION restaurantschema.fn_get_customer_summary(p_customerid INT)
+RETURNS TABLE(
+	customer_name      VARCHAR,
+	phone              VARCHAR,
+	total_orders       BIGINT,
+	total_reservations BIGINT,
+	total_spent        NUMERIC
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	RETURN QUERY
+	SELECT
+		c.name,
+		c.phone,
+		(SELECT COUNT(*) FROM restaurantschema."Orders" AS o WHERE o.customerid = p_customerid),
+		(SELECT COUNT(*) FROM restaurantschema."Reservations" AS r WHERE r.customerid = p_customerid),
+		(SELECT COALESCE(SUM(restaurantschema.fn_calculate_order_total(o.orderid)), 0)
+		 FROM restaurantschema."Orders" AS o WHERE o.customerid = p_customerid)
+	FROM restaurantschema."Customers" AS c
+	WHERE c.customerid = p_customerid;
+END;
+$$;
+
 -- ================================================================
 -- 2) STORED PROCEDURES — SELECT / INSERT
 -- ================================================================
@@ -115,7 +150,62 @@ END;
 $$;
 
 
--- 2.2 Purpose: Retrieve and display the order history for a specific customer (SELECT).
+-- 2.2 Purpose: Creates a new reservation for a customer.
+-- Parameters:
+--   - p_customerid (INT): The unique identifier of the customer.
+--   - p_tableid (BIGINT): The unique identifier of the restaurant table.
+--   - p_datetime (TIMESTAMP): The reservation date and time.
+--   - p_numpeople (INT): The number of people for the reservation.
+-- Expected behavior: Checks whether the table exists, has enough seats, and is available at the requested time. If all checks pass, a new reservation is added to the Reservations table.
+-- Uses EXCEPTION block for descriptive error catching.
+CREATE OR REPLACE PROCEDURE restaurantschema.sp_create_reservation(
+    IN p_customerid INT,
+    IN p_tableid BIGINT,
+    IN p_datetime TIMESTAMP,
+    IN p_numpeople INT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_tablesize INT;
+BEGIN
+    -- Get the table capacity
+    SELECT sizeoftable
+    INTO v_tablesize
+    FROM restaurantschema."RestaurantTables"
+    WHERE tableid = p_tableid;
+
+    -- Check if the table exists
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Table not found.';
+    END IF;
+
+    -- Check the number of people
+    IF p_numpeople <= 0 THEN
+        RAISE EXCEPTION 'Number of people must be greater than 0.';
+    END IF;
+
+    IF p_numpeople > v_tablesize THEN
+        RAISE EXCEPTION 'The table does not have enough seats.';
+    END IF;
+
+    -- Check table availability
+    IF NOT restaurantschema.fn_is_table_available(p_tableid, p_datetime) THEN
+        RAISE EXCEPTION 'The table is already reserved for this time.';
+    END IF;
+
+    -- Create reservation
+    INSERT INTO restaurantschema."Reservations"
+        (tableid, customerid, reservationdatetime, numberofpeople)
+    VALUES
+        (p_tableid, p_customerid, p_datetime, p_numpeople);
+
+    RAISE NOTICE 'Reservation created successfully.';
+END;
+$$;
+
+
+-- 2.3 Purpose: Retrieve and display the order history for a specific customer (SELECT).
 -- Parameters:
 --   - p_customer_id (INT): ID of the customer.
 -- Expected behavior: Loops through the customer's orders and outputs their ID and status to the console.
@@ -139,6 +229,29 @@ BEGIN
     IF NOT v_found THEN
         RAISE NOTICE 'No orders found for customer with ID %.', p_customer_id;
     END IF;
+END;
+$$;
+
+
+-- 2.4 Purpose: Returns the menu items available at a specified restaurant.
+-- Parameters:
+--   - p_restaurantid (INT): The unique identifier of the restaurant.
+--   - p_result (REFCURSOR): A cursor used to return the menu items.
+-- Expected behavior: Retrieves all menu items available at the specified restaurant, including their names and prices, ordered by price.
+CREATE OR REPLACE PROCEDURE restaurantschema.sp_show_restaurant_menu(
+    IN p_restaurantid INT,
+    INOUT p_result REFCURSOR
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    OPEN p_result FOR
+    SELECT mi.name, mi.price
+    FROM restaurantschema."RestaurantMenuItemsJunctionTable" rmi
+    JOIN restaurantschema."MenuItems" mi
+        ON rmi.menuitemid = mi.menuitemid
+    WHERE rmi.restaurantid = p_restaurantid
+    ORDER BY mi.price;
 END;
 $$;
 
@@ -221,6 +334,46 @@ END;
 $$;
 
 
+-- 3.3 Purpose: Updates the status of an existing order.
+-- Parameters:
+--   - p_orderid (INT): The unique identifier of the order.
+--   - p_newstatus (VARCHAR): The new status of the order.
+-- Expected behavior: Checks whether the order exists and whether the new status is valid. If all checks pass, the order status is updated.
+-- Uses EXCEPTION block for descriptive error catching.
+CREATE OR REPLACE PROCEDURE restaurantschema.sp_update_order_status(
+    IN p_orderid INT,
+    IN p_newstatus VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_current_status VARCHAR;
+BEGIN
+    -- Check if the order exists
+    SELECT status
+    INTO v_current_status
+    FROM restaurantschema."Orders"
+    WHERE orderid = p_orderid;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Order not found.';
+    END IF;
+
+    -- Check if the new status is valid
+    IF p_newstatus NOT IN ('pending', 'in_progress', 'completed', 'cancelled') THEN
+        RAISE EXCEPTION 'Invalid order status.';
+    END IF;
+
+    -- Update the order status
+    UPDATE restaurantschema."Orders"
+    SET status = p_newstatus
+    WHERE orderid = p_orderid;
+
+    RAISE NOTICE 'Order status updated successfully.';
+END;
+$$;
+
+
 -- ================================================================
 -- 4) TEST CALLS
 -- ================================================================
@@ -234,19 +387,36 @@ SELECT restaurantschema.is_table_suitable(1, 4, '2026-07-22 19:00:00');
 -- Test 3: Get Average Restaurant Rating (Function)
 SELECT restaurantschema.get_avg_restaurant_rating(1) AS "Average rating of restaurant №1";
 
--- Test 4: Register New Customer (Procedure)
+-- Test 4: Get Customer Summary (Function)
+SELECT * FROM restaurantschema.fn_get_customer_summary(1);
+
+-- Test 5: Register New Customer (Procedure)
 CALL restaurantschema.register_customer('Alex', '+380501112233');
 
--- Test 5: Show Customer Orders (Procedure - result in Notice log)
+-- Test 6: Register New Reservation (Procedure)
+CALL restaurantschema.sp_create_reservation(2, 13, TIMESTAMP '2026-08-01 18:00', 4);
+
+-- Test 7: Show Customer Orders (Procedure - result in Notice log)
 CALL restaurantschema.show_customer_orders(1);
 
--- Test 6: Promote Staff (Procedure)
+-- Test 8: Show Restaurant Menu (Procedure)
+BEGIN;
+CALL restaurantschema.sp_show_restaurant_menu(1, 'menu_cursor');
+FETCH ALL FROM menu_cursor;
+COMMIT;
+
+-- Test 9: Promote Staff (Procedure)
 CALL restaurantschema.promote_staff(1, 2);
 
--- Test 7: Update Menu Price (Procedure)
+-- Test 10: Update Menu Price (Procedure)
 CALL restaurantschema.sp_update_menu_item_price(3, 199.99);
+
+-- Test 11: Update The Order Status (Procedure) 
+CALL restaurantschema.sp_update_order_status(1, 'completed');
 
 -- Verification Selects
 SELECT * FROM restaurantschema."Customers" WHERE name = 'Alex';
+SELECT * FROM restaurantschema."Reservations" WHERE tableid = 13;
 SELECT staffid, staffroleid FROM restaurantschema."Staff" WHERE staffid = 1;
 SELECT menuitemid, price FROM restaurantschema."MenuItems" WHERE menuitemid = 3;
+SELECT orderid, status FROM restaurantschema."Orders" WHERE orderid = 1;

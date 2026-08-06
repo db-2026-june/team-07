@@ -55,6 +55,7 @@ Save the following values (the Private Key is displayed only once):
 - Private Key
 
 ---
+<img width="835" height="482" alt="image" src="https://github.com/user-attachments/assets/f5ea26ea-63d1-4d81-bf5a-712f9e4de20b" />
 
 ## 1.4 Find the Organization ID
 
@@ -77,6 +78,7 @@ Example:
 ```
 
 ---
+<img width="1313" height="904" alt="image" src="https://github.com/user-attachments/assets/a44c98ea-e062-483b-8d37-7d88099d1dc1" />
 
 ## 1.5 Configure Network Access
 
@@ -130,6 +132,7 @@ Disable (uncheck) this option.
 > **Note:** This setting is recommended only for development or laboratory environments. In production environments, it is recommended to keep this option enabled and explicitly allow only trusted IP addresses.
 
 ---
+<img width="1886" height="903" alt="image" src="https://github.com/user-attachments/assets/58c1779b-ba37-47e9-9b45-9c999b7a9fc0" />
 
 # 2. Prepare the Terraform Project
 
